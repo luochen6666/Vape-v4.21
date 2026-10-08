@@ -457,6 +457,24 @@ extends Mod {
         this.rainbowHue = fArray[0];
     }
 
+    /**
+     * 关闭所有模块分类面板。全新安装时用于让第一次注入的各分类面板保持默认（关闭）状态。
+     */
+    public static void closeAllCategoryFrames() {
+        for (Frame frame : ClientSettings.getAllFrames()) {
+            if (!(frame instanceof ModuleCategoryFrame)) {
+                continue;
+            }
+            frame.setVisible(false);
+        }
+    }
+
+    /**
+     * 全新注入（本地没有配置文件、只读到别处目录的配置）时置为 true：
+     * 恢复界面帧状态时，强制把模块分类面板关掉，不沿用档案里保存的 "visible": true。
+     */
+    public static boolean suppressStoredCategoryFrameVisibility;
+
     public void loadFrameStates(JsonArray jsonArray) {
         if (jsonArray.size() == 0) {
             return;
@@ -470,6 +488,10 @@ extends Mod {
                 for (Frame frame : ClientSettings.getAllFrames()) {
                     if (!frame.getName().equals(jsonObject.get("title").getAsString())) continue;
                     frame.t(jsonObject);
+                    // 全新注入：不要因为别处目录配置里的 "visible": true 就把分类面板打开
+                    if (ClientSettings.suppressStoredCategoryFrameVisibility && frame instanceof ModuleCategoryFrame) {
+                        frame.setVisible(false);
+                    }
                 }
                 continue;
             }

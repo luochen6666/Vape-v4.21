@@ -471,6 +471,12 @@ public class RenderUtil {
 
     public static void p() {
         if (ForgeVersion.MC_1_21_10.d() && !ForgeVersion.MC_26_1.d()) {
+            // 1.21.10 <= 版本 < 26.1：相机旋转由 LocalPlayerRotationUtil 的投影路径提供
+            // （那份视图矩阵的平移被清零），所以这里不能重复施加旋转；但第三人称的
+            // (renderPos - cameraPos) 平移必须补上。否则所有沿用「renderPos 相对坐标 +
+            // RenderUtil.d()」约定的模块（ESP2D/ESP3D、ItemESP、NameTags、BedPlates、
+            // Search、Tracers、Arrows、StorageESP ...）在第三人称下都会整体偏一个后拉距离。
+            RenderUtil.f(Minecraft.D(), false);
             return;
         }
         RenderUtil.f(Minecraft.D());
@@ -481,17 +487,34 @@ public class RenderUtil {
     }
 
     public static void f(RenderManager renderManager) {
+        RenderUtil.f(renderManager, true);
+    }
+
+    public static void f(RenderManager renderManager, boolean applyCameraRotation) {
         if (ForgeVersion.MC_1_16_5.d()) {
-            OpenGlBackendHolder.backend.rotate(renderManager.getPlayerViewY(), 1.0f, 0.0f, 0.0f);
-            OpenGlBackendHolder.backend.rotate(renderManager.getPlayerViewX() + 180.0f, 0.0f, 1.0f, 0.0f);
-            if (GuiRenderPrimitives.d() && Minecraft.gameSettings().x() != 0) {
+            if (applyCameraRotation) {
+                OpenGlBackendHolder.backend.rotate(renderManager.getPlayerViewY(), 1.0f, 0.0f, 0.0f);
+                OpenGlBackendHolder.backend.rotate(renderManager.getPlayerViewX() + 180.0f, 0.0f, 1.0f, 0.0f);
+            }
+            if (GuiRenderPrimitives.d()) {
+                // 参考点换算：各模块传入的是「renderPos 相对」坐标，而世界是按相机渲染的，
+                // 必须把 (renderPos - cameraPos) 补进模型矩阵才是「相机相对」坐标。
+                //   * 第三人称：该偏移 = 后拉距离（原本只在这一种情况下补偿）；
+                //   * 自由视角(Freecam)：FreecamModernController.updateRenderViewPosition 直接
+                //     改 ActiveRenderInfo 的相机位置，玩家实体不动、游戏仍是第一人称，于是该
+                //     偏移 = 整段相机位移 —— 以前不补偿，所以开自由视角时所有世界叠加物
+                //     （ESP / 存储ESP / 箭 / 射线 …）整体平移。现在统一按相机作参考。
+                //   * 普通第一人称：cameraPos == renderPos（Y 已被 updateInterpolatedRenderPosition
+                //     强制成相机 Y），偏移≈0，行为不变。
                 ActiveRenderInfo activeRenderInfo = Minecraft.m$src$Lgg_vape_wrapper_impl_EntityRenderer_$13begmf().l();
-                double d = RenderManager.getInterpolatedRenderPosX() - activeRenderInfo.o().getX();
-                double d2 = RenderManager.getInterpolatedRenderPosY() - activeRenderInfo.o().getY();
-                double d3 = RenderManager.getInterpolatedRenderPosZ() - activeRenderInfo.o().getZ();
-                float f = FreeLookHudModule.isActive() ? FreeLookHudModule.getRenderPitch() - Minecraft.thePlayer().J() : 0.0f;
-                OpenGlBackendHolder.backend.translate(d, d2, d3);
-                OpenGlBackendHolder.backend.rotate(-f, 0.0f, 1.0f, 0.0f);
+                OpenGlBackendHolder.backend.translate(RenderManager.getInterpolatedRenderPosX() - activeRenderInfo.o().getX(), RenderManager.getInterpolatedRenderPosY() - activeRenderInfo.o().getY(), RenderManager.getInterpolatedRenderPosZ() - activeRenderInfo.o().getZ());
+                // 这里原来还有一句第三人称下的 FreeLook yaw 增量补偿
+                //   rotate(-(FreeLookHudModule.getRenderPitch() - thePlayer().J()), 0, 1, 0)
+                // 但上面两个 rotate 用的就是 Camera 对象里的 yaw/pitch，而 Camera 在实体渲染
+                // 阶段之前就已建立（FreeLook 在此阶段的还原只作用于玩家实体、不作用于相机），
+                // 也就是说相机里存的已经是自由视角朝向 —— 那句增量等于把「自由视角 yaw - 身体
+                // yaw」再叠一次，第三人称 + 自由旋转视角下会让所有世界叠加物多转一个 yaw。
+                // 自由视角未开启时该增量为 0，故删除它不改变任何其它情况的行为。
             }
         }
     }

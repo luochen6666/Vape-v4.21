@@ -173,14 +173,27 @@ extends Mod {
             startX = viewDirection.getX();
             startY += ForgeVersion.MC_1_16_5.d() ? viewDirection.getY() - (double)player.X() : viewDirection.getY();
             startZ = viewDirection.getZ();
-            if (ForgeVersion.MC_1_16_5.d() && Minecraft.gameSettings().x() != 0) {
+            if (ForgeVersion.MC_1_16_5.d()) {
                 ActiveRenderInfo activeRenderInfo = Minecraft.m$src$Lgg_vape_wrapper_impl_EntityRenderer_$13begmf().l();
                 double cameraOffsetX = RenderManager.getInterpolatedRenderPosX() - activeRenderInfo.o().getX();
                 double cameraOffsetY = RenderManager.getInterpolatedRenderPosY() - activeRenderInfo.o().getY();
                 double cameraOffsetZ = RenderManager.getInterpolatedRenderPosZ() - activeRenderInfo.o().getZ();
-                targetX += cameraOffsetX;
-                targetY += cameraOffsetY;
-                targetZ += cameraOffsetZ;
+                // 空间约定（与 ItemESP / NameTags / BedPlates 一致）：缓冲后端下 RenderUtil.d()
+                // 已经把 (renderPos - cameraPos) 放进模型矩阵（第三人称的后拉距离、自由视角
+                // Freecam 的相机位移都算在内），所以起点要放到 -偏移（= 相机位置，射线才会
+                // 汇聚在屏幕中心），目标不能再加该偏移（否则算两次）。
+                // 以前这里额外要求第三人称，导致开自由视角（游戏仍是第一人称）时整段跳过、
+                // 射线中心点跟着相机位移一起偏。
+                // 非缓冲（旧）路径没有这层模型矩阵修回，才需要在第三人称下把目标手动转成相机相对。
+                if (GuiRenderPrimitives.d()) {
+                    startX -= cameraOffsetX;
+                    startY -= cameraOffsetY;
+                    startZ -= cameraOffsetZ;
+                } else if (Minecraft.gameSettings().x() != 0) {
+                    targetX += cameraOffsetX;
+                    targetY += cameraOffsetY;
+                    targetZ += cameraOffsetZ;
+                }
             }
         }
         targetY += (double)entity.X();

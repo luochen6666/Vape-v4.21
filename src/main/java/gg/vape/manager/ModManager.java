@@ -361,13 +361,9 @@ implements EventListener {
             mod.onFinishModuleInitialization();
         }
         if (ForgeVersion.MC_1_8_9.L()) {
-            if (Vape.INSTANCE.isOnlineConnected()) {
-                this.getMod(NoClickDelayHudModule.class).setEnabled(true);
-                this.getMod(MouseDelayFix.class).setEnabled(true);
-            }
-            if (!this.getMod(MouseDelayFix.class).isEnabled()) {
-                this.getMod(MouseDelayFix.class).setEnabled(true);
-            }
+            // 1.8.9 的这两个兼容补丁与在线状态/网络无关：无条件开启，离线时行为同样确定
+            this.getMod(NoClickDelayHudModule.class).setEnabled(true);
+            this.getMod(MouseDelayFix.class).setEnabled(true);
         }
     }
 

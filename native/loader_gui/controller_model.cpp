@@ -5,7 +5,6 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <winhttp.h>
-#include <shellapi.h>
 
 #include <algorithm>
 #include <chrono>
@@ -16,8 +15,6 @@
 #include <unordered_map>
 
 namespace {
-constexpr UINT WM_CONTROLLER_STATE = WM_APP + 41;
-
 std::wstring onlineBaseUrl() {
     wchar_t value[2048]{};
     const DWORD length = GetEnvironmentVariableW(L"VAPE_ONLINE_BASE_URL", value,
@@ -236,10 +233,7 @@ ControllerModel::ControllerModel() {
     autoLoginToService();
 }
 
-ControllerModel::~ControllerModel() {
-    cancelAuth_ = true;
-    if (authThread_.joinable()) authThread_.join();
-}
+ControllerModel::~ControllerModel() = default;
 
 ControllerPage ControllerModel::page() const {
     std::lock_guard lock(mutex_);
@@ -374,14 +368,6 @@ bool ControllerModel::injectMinecraft(std::uint32_t processId) {
     return true;
 }
 
-std::wstring ControllerModel::makeHwid() {
-    DWORD serial = 0;
-    GetVolumeInformationW(L"C:\\", nullptr, 0, &serial, nullptr, nullptr, nullptr, 0);
-    wchar_t value[32]{};
-    swprintf_s(value, L"%08X", serial);
-    return value;
-}
-
 std::string ControllerModel::httpPost(const wchar_t* host, const wchar_t* path,
                                       const std::string& body) {
     HINTERNET session = WinHttpOpen(L"Vape4/Launcher",
@@ -474,72 +460,26 @@ std::string ControllerModel::jsonString(const std::string& json, const char* key
     return end == std::string::npos ? std::string{} : json.substr(position + 1, end - position - 1);
 }
 
-void ControllerModel::beginBrowserAuthentication(void* windowHandle) {
-    cancelAuth_ = true;
-    if (authThread_.joinable()) authThread_.join();
-    cancelAuth_ = false;
-    setPage(ControllerPage::BrowserAuth);
-    setStatus(L"");
-    const auto window = static_cast<HWND>(windowHandle);
-    authThread_ = std::thread([this, window] {
-        const auto hwid = makeHwid();
-        std::string narrowHwid;
-        narrowHwid.reserve(hwid.size());
-        for (const wchar_t character : hwid) {
-            narrowHwid.push_back(static_cast<char>(character));
-        }
-        const auto challenge = httpPost(L"www.vape.gg", L"/api/v1/app-auth/generate",
-            "edition=v4&hwid=" + narrowHwid);
-        if (challenge.size() != 40 || cancelAuth_) {
-            if (!cancelAuth_) {
-                setStatus(ls(Ls::CannotOpenBrowserLogin));
-                setPage(ControllerPage::Login);
-            }
-            PostMessageW(window, WM_CONTROLLER_STATE, 0, 0);
-            return;
-        }
-        std::wstring wideChallenge(challenge.begin(), challenge.end());
-        const std::wstring url = L"https://www.vape.gg/app-auth/proceed/" + wideChallenge;
-        {
-            std::lock_guard lock(mutex_);
-            browserUrl_ = url;
-        }
-        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-        while (!cancelAuth_) {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            const auto response = httpPost(L"www.vape.gg", L"/api/v1/app-auth/status",
-                "token=" + challenge);
-            const auto status = jsonString(response, "status");
-            if (status == "success") {
-                {
-                    std::lock_guard lock(mutex_);
-                    accessToken_ = jsonString(response, "token");
-                }
-                refreshMinecraftProcesses();
-                setPage(ControllerPage::MinecraftSelection);
-                break;
-            }
-            if (status == "timed out") {
-                setStatus(ls(Ls::BrowserLoginTimeout));
-                setPage(ControllerPage::Login);
-                break;
-            }
-        }
-        PostMessageW(window, WM_CONTROLLER_STATE, 0, 0);
-    });
+void ControllerModel::beginBrowserAuthentication(void* /*windowHandle*/) {
+    // The upstream browser flow POSTed to www.vape.gg/api/v1/app-auth/generate,
+    // opened https://www.vape.gg/app-auth/proceed/<challenge> through
+    // ShellExecuteW and then polled www.vape.gg/api/v1/app-auth/status. Those
+    // remote endpoints are gone, and the flow was unreachable anyway: only the
+    // login page could enter ControllerPage::BrowserAuth, which itself only led
+    // back to the login page. The button therefore now fails locally and issues
+    // no network request at all. The loopback Service login
+    // (autoLoginToService / submitCredentialAuthentication) plus
+    // ControllerPage::MinecraftSelection is the only supported path.
+    setStatus(ls(Ls::CannotOpenBrowserLogin));
+    setPage(ControllerPage::Login);
 }
 
 void ControllerModel::reopenBrowserAuthentication() {
-    std::wstring url;
-    {
-        std::lock_guard lock(mutex_);
-        url = browserUrl_;
-    }
-    if (!url.empty()) ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    // No browser URL exists any more (see beginBrowserAuthentication). Kept as a
+    // no-op so the login page's hit targets stay wired to the model.
 }
 
 void ControllerModel::cancelBrowserAuthentication() {
-    cancelAuth_ = true;
     setPage(ControllerPage::Login);
 }
 

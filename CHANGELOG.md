@@ -1,5 +1,42 @@
 # 更新日志
 
+## v4.21.40 (2026-10-08)
+
+**世界叠加物投影修复（第三人称 / 自由视角）+ 全新注入默认收起分类面板 + 配置本地化与离线化**
+
+### 第三人称与自由视角下的叠加物偏移
+
+所有世界叠加物（ESP 2D/3D、存储 ESP、射线、名牌、物品 ESP、箭、指示器等）都遵循「`renderPos` 相对坐标 + `RenderUtil.d()` 补相机变换」这一约定，但该补偿在 **1.21.10 – 25.x** 窗口被 `p()` 的提前 `return` 跳过（那个窗口的相机旋转由投影路径提供、视图矩阵平移被清零），于是：
+
+- **1.21.11 第三人称**：ESP 方框（2D/3D）与描边整体偏移一个"后拉距离"；
+- **自由视角（Freecam）**：`FreecamModernController` 直接搬走 `ActiveRenderInfo` 的相机位置，而游戏仍是第一人称，补偿同样被跳过 → 所有世界叠加物水平偏移整段相机位移（Y 早已跟随相机，所以只有 X/Z 偏）。
+
+修复：该窗口改为**只补第三人称/自由视角平移、不补旋转**（旋转仍由投影路径负责），一处修好所有走该约定的模块；`Tracers` / `Search` 的**射线起点**改为在缓冲后端下放到 `-偏移`（相机位置，射线重新汇聚于屏幕中心）；`ESPOutline` 不走 `d()`，改为 1.17+ 直接用相机位置作参考点；`RenderUtil.f()` 里第三人称下重复叠加的 FreeLook yaw 增量删除。
+
+### 注入时的 Freecam 保护
+
+新增客户端设置 **`Disable Freecam on inject`（默认开启）**：注入时若检测到 Freecam 仍处于开启状态（配置残留），自动关闭并弹出通知。客户端设置 GUI → Modules 分组内可关闭该行为。
+
+### 全新注入默认收起分类面板
+
+每次全新注入（本地没有配置文件、只读到别处目录/原生/云端配置）时，**不再恢复档案里保存的分类面板打开状态**：`loadFrameStates` 对 `ModuleCategoryFrame` 强制 `setVisible(false)`，并在恢复后写回"收起"状态，因此侧边栏各分类默认是白色、对应模块列不显示。已有本地配置的会话行为不变，模块开启状态不受影响。
+
+### 配置只读写 exe 同目录
+
+`LocalConfigStore` 只写 `<vape.directory>\.vapeclient\config.json`（该属性由 DLL 设为注入器 exe 所在目录）：
+
+- 删除 `%APPDATA%\.vapeclient` 回退基目录；
+- 删除"从 `%APPDATA%` 迁移旧配置"的复制逻辑（这正是"全新注入却读到别处配置"的来源）。
+
+### 离线化
+
+- **远程头像**：`RemoteImageTextureLoader.download()` 恒返回 null，不再请求 `minotar.net`，头像回退内嵌 `default_user` 占位图（`RemoteImageTextureCache` 补哨兵值避免 `ConcurrentHashMap` 拒 null）；
+- **native 外网认证移除**：Loader 的浏览器登录（硬编码 `www.vape.gg` 的 `app-auth/generate`、`proceed`、`status` 轮询与 `ShellExecuteW`）整段删除，改为本地失败提示并停留在登录页；该页面在正常流程下本就不可达。保留 `httpPostJson` 与 `winhttp`（回环服务登录仍需要）；
+- **死代码清理**：删除 TheAltening 授权（`LicenseInfoClient` / `LicenseStatusClient` / `LicenseInfo` / `LicenseStatus` / `LicenseManager`）、Xbox/Microsoft 登录（`MicrosoftSessionAuthenticator` / `MutableAccountCredentials` / `AccountCredentials` / `XboxLiveAuthResult` / `PermissiveX509TrustManager`）、`utils/network/HttpRequest` 及 `Vape.licenseManager` 字段；
+- **离线行为明确化**：离线（无账号/本地服务不可用）时只置 `REGISTRATION_OFFLINE` 并写日志，**不再自动弹出注册界面**（手动打开账号页仍可用）；修复 `OnlineSettings` 加载失败时 `payload == null` 的二次 NPE；`isOnlineConnected()` 改为基于本地连接状态；1.8.9 的 `NoClickDelayHudModule` / `MouseDelayFix` 兼容补丁改为**无条件开启**；Reach 的安全警告改为本地条件触发。
+
+> 本地回环后端（`127.0.0.1:8080` REST / `127.0.0.1:8091` Zeus / `FileStore` / `vape-service.json`）与 `VAPE_ONLINE_BASE_URL`、`VAPE_ZEUS_ADDRESS` 环境变量覆盖能力**保持不变**，本地配置、模块、GUI、映射注入均不受影响。
+
 ## v4.21.39 (2026-09-20)
 
 **修复原版（非 Forge）客户端两个映射登记失败：雾 `setupFog` 参数个数 + 1.19+ 发包方法名**

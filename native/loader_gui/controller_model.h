@@ -43,6 +43,10 @@ public:
 
     void refreshMinecraftProcesses();
     bool injectMinecraft(std::uint32_t processId);
+    // Browser-based authentication was removed together with its remote
+    // www.vape.gg endpoints. These entry points are kept so the UI keeps
+    // compiling; none of them issues a network request. The begin call reports a
+    // local failure and returns to ControllerPage::Login.
     void beginBrowserAuthentication(void* windowHandle);
     void reopenBrowserAuthentication();
     void cancelBrowserAuthentication();
@@ -58,7 +62,6 @@ public:
     bool loginToService();
 
 private:
-    static std::wstring makeHwid();
     static std::string httpPost(const wchar_t* host, const wchar_t* path,
         const std::string& body);
     static std::string httpPostJson(const std::wstring& baseUrl,
@@ -75,10 +78,7 @@ private:
     std::vector<std::uint32_t> injectedProcesses_;
     std::string accessToken_;
     std::wstring serviceHttpBase_;
-    std::wstring browserUrl_;
     LocalControllerService service_;
-    std::atomic<bool> cancelAuth_{false};
-    std::thread authThread_;
     bool cachePreference_{};
     int loadingStage_{};
     std::chrono::steady_clock::time_point loadingStarted_{};

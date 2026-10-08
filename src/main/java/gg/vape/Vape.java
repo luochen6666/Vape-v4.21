@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import gg.vape.account.AccountInfo;
 import gg.vape.account.AccountInfoResponse;
-import gg.vape.account.LicenseManager;
 import gg.vape.api.ApiAccessTokenProvider;
 import gg.vape.api.ApiResponse;
 import gg.vape.api.ApiServices;
@@ -39,6 +38,7 @@ import gg.vape.manager.client.EnemyManager;
 import gg.vape.manager.client.FriendManager;
 import gg.vape.manager.client.IndependentSettingsManager;
 import gg.vape.manager.client.OnlineConnectionManager;
+import gg.vape.manager.client.OnlineConnectionState;
 import gg.vape.manager.client.OnlineFriendManager;
 import gg.vape.manager.client.OnlineManager;
 import gg.vape.manager.client.ProfilesManager;
@@ -136,7 +136,6 @@ public class Vape {
     private String cachedAllData;
     private OnlineFriendManager onlineFriendManager;
     private ModManager modManager;
-    private LicenseManager licenseManager;
     private IndependentSettingsManager independentSettingsManager;
     private Boolean isLabyModCache;
     private PrimaryMappingTaskSet primaryMappingTaskSet;
@@ -157,7 +156,10 @@ public class Vape {
     private static int[] supportedVersionIds;
 
     public boolean isOnlineConnected() {
-        return OnlineConnectionManager.INSTANCE.getGlobalSettingsController().isFirstRun();
+        // 改为基于本地已知状态判定：不再复用 GlobalSettingsController.isFirstRun()
+        // （后者在本地全局设置缺失、REST 回退失败时会变成默认值 true，结果不确定）。
+        // 离线时连接状态恒为 OFFLINE，因此这里恒为 false。
+        return OnlineConnectionManager.INSTANCE.getConnectionState() == OnlineConnectionState.ONLINE;
     }
 
     public boolean isMappingsRemapped() {
@@ -188,6 +190,8 @@ public class Vape {
             Vape.debugLog("otherData is NULL!");
         }
         INSTANCE.getProfilesManager().updatePublicProfileLinks();
+        // 配置/配置档案刚应用完：注入时若检测到 Freecam 仍开启，自动关闭并通知
+        INSTANCE.getClientSettings().checkFreecamStateOnInject();
     }
 
     public MacroManager getMacrosManager() {
@@ -731,10 +735,6 @@ public class Vape {
         }
     }
     */
-
-    public LicenseManager getLicenseManager() {
-        return this.licenseManager;
-    }
 
     public GLUtils getGlUtils() {
         return this.glUtils;

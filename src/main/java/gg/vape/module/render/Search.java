@@ -277,11 +277,22 @@ extends Mod {
             startX = vec3d.getX();
             startY += ForgeVersion.MC_1_16_5.d() ? vec3d.getY() - (double)entityPlayerSP.X() : vec3d.getY();
             startZ = vec3d.getZ();
-            if (ForgeVersion.MC_1_16_5.d() && Minecraft.gameSettings().x() != 0) {
+            if (ForgeVersion.MC_1_16_5.d()) {
                 ActiveRenderInfo activeRenderInfo = Minecraft.m$src$Lgg_vape_wrapper_impl_EntityRenderer_$13begmf().l();
-                targetX += RenderManager.getInterpolatedRenderPosX() - activeRenderInfo.o().getX();
-                targetY += RenderManager.getInterpolatedRenderPosY() - activeRenderInfo.o().getY();
-                targetZ += RenderManager.getInterpolatedRenderPosZ() - activeRenderInfo.o().getZ();
+                double cameraOffsetX = RenderManager.getInterpolatedRenderPosX() - activeRenderInfo.o().getX();
+                double cameraOffsetY = RenderManager.getInterpolatedRenderPosY() - activeRenderInfo.o().getY();
+                double cameraOffsetZ = RenderManager.getInterpolatedRenderPosZ() - activeRenderInfo.o().getZ();
+                // 同 Tracers：缓冲后端下 RenderUtil.d() 已把 (renderPos - cameraPos) 放进模型
+                // 矩阵（含自由视角的相机位移），起点放到 -偏移（= 相机位置）；旧路径才手动补目标。
+                if (GuiRenderPrimitives.d()) {
+                    startX -= cameraOffsetX;
+                    startY -= cameraOffsetY;
+                    startZ -= cameraOffsetZ;
+                } else if (Minecraft.gameSettings().x() != 0) {
+                    targetX += cameraOffsetX;
+                    targetY += cameraOffsetY;
+                    targetZ += cameraOffsetZ;
+                }
             }
         }
         if (GuiRenderPrimitives.d()) {

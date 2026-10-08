@@ -13,10 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
 /**
- * Local, offline fallback for the online settings/profile storage. Writes a
- * single JSON document under %APPDATA%\.vapeclient\config.json so module
- * settings, profiles, friends and global preferences persist without the
- * loopback service.
+ * Local, offline config storage. Writes a single JSON document to
+ * {@code <vape.directory>\.vapeclient\config.json} (i.e. the same directory as
+ * the injected exe). It never reads or writes any other location: the old
+ * %APPDATA% fallback and the legacy %APPDATA% import were removed.
  */
 public final class LocalConfigStore {
     private static final String FILE_NAME = "config.json";
@@ -31,11 +31,8 @@ public final class LocalConfigStore {
         if (nativeDirectory != null && !nativeDirectory.trim().isEmpty()) {
             return new File(nativeDirectory, ".vapeclient");
         }
-        String appData = System.getenv("APPDATA");
-        if (appData == null || appData.trim().isEmpty()) {
-            appData = System.getProperty("user.home");
-        }
-        return new File(appData, ".vapeclient");
+        // 只使用本地目录：不再回退到 %APPDATA%\.vapeclient（那是"别的地方的配置"）
+        return new File(System.getProperty("user.dir", "."), ".vapeclient");
     }
 
     public static File directory() {
@@ -44,7 +41,6 @@ public final class LocalConfigStore {
             directory.mkdirs();
         }
         hideDirectory(directory);
-        migrateLegacyConfig(directory);
         return directory;
     }
 
@@ -57,31 +53,6 @@ public final class LocalConfigStore {
         }
         catch (Exception ignored) {
             // hiding is cosmetic; never fail config access over it
-        }
-    }
-
-    private static void migrateLegacyConfig(File targetDirectory) {
-        if (migrationAttempted) {
-            return;
-        }
-        migrationAttempted = true;
-        File target = new File(targetDirectory, FILE_NAME);
-        if (target.isFile()) {
-            return;
-        }
-        String appData = System.getenv("APPDATA");
-        if (appData == null || appData.trim().isEmpty()) {
-            appData = System.getProperty("user.home");
-        }
-        File legacy = new File(new File(appData, ".vapeclient"), FILE_NAME);
-        if (!legacy.isFile()) {
-            return;
-        }
-        try {
-            Files.copy(legacy.toPath(), target.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING);
-        }
-        catch (Exception ignored) {
         }
     }
 

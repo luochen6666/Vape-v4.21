@@ -37,6 +37,7 @@ public class ProfilesManager {
     private final List<Profile> profiles = new ArrayList<Profile>();
     static final boolean assertionsDisabled = !ProfilesManager.class.desiredAssertionStatus();
     private Profile activeProfile;
+    private boolean suppressDefaultFrameStates;
     private final Set<UUID> deletedRemoteProfileIds = new LinkedHashSet<UUID>();
 
     public void resetAllSettings() {

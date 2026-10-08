@@ -82,9 +82,8 @@ extends Mod {
     @Override
     public void onEnable() {
         super.onEnable();
-        if (Vape.INSTANCE.isOnlineConnected()) {
-            Vape.INSTANCE.getNotificationManager().show("Reach is unsafe", "Reach is generally unsafe and detected by most servers, it is advised to avoid using it", NotificationType.ALERT, 15000L);
-        }
+        // 安全警告只取决于本地条件（Reach 被本地开启），不再依赖在线状态
+        Vape.INSTANCE.getNotificationManager().show("Reach is unsafe", "Reach is generally unsafe and detected by most servers, it is advised to avoid using it", NotificationType.ALERT, 15000L);
     }
 
     private void misplaceParticles() {

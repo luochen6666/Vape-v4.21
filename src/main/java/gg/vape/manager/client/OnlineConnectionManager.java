@@ -298,8 +298,10 @@ public class OnlineConnectionManager {
     }
 
     private void handleInitializationFailure() {
+        // 离线（无账号/token 或本地服务不可用）：只置为离线状态并写日志，
+        // 不主动弹出注册/登录界面；用户手动打开账号页仍可正常使用（入口不禁用）。
         this.setAccountState(OnlineAccountState.REGISTRATION_OFFLINE);
-        ClientSettings.getFrame(OnlineFriendsFrame.class).showRegistration();
+        Vape.debugLog("[Vape] 在线服务初始化失败，账号状态置为 REGISTRATION_OFFLINE（不自动弹出注册界面）");
         this.initializationStarted = false;
     }
 
@@ -588,6 +590,8 @@ public class OnlineConnectionManager {
             }
         }
         catch (Throwable throwable) {
+            // 离线时初始化会因缺少账号信息而失败：记录原因后按离线处理
+            Vape.logThrowable(throwable);
             initializationFailureHandler.run();
         }
     }

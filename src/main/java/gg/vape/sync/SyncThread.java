@@ -14,6 +14,7 @@ import gg.vape.config.ConfigJsonUtils;
 import gg.vape.config.LocalConfigStore;
 import gg.vape.config.Profile;
 import gg.vape.config.SettingsDataType;
+import gg.vape.event.impl.EventTickBase;
 import gg.vape.manager.client.OnlineConnectionManager;
 import gg.vape.notification.SettingsSyncStatusNotification;
 import gg.vape.runtime.NativeBridge;
@@ -279,15 +280,31 @@ public class SyncThread {
                 this.vape.loadConfigData(config, true);
                 return;
             }
+            // 全新注入（本地没有配置文件，只会读到原生存储 / 云端等其他目录的配置）：
+            // 不沿用那边保存的分类面板打开状态 —— 各分类默认保持白色（关闭），
+            // 恢复完成后把"关闭"写回当前档案，之后就一直是白色。
+            gg.vape.module.none.ClientSettings.suppressStoredCategoryFrameVisibility = true;
             AccountInfo accountInfo = this.vape.getAccountInfo();
             if (accountInfo != null && accountInfo.hasProfilesEnabled()) {
                 this.loadRemoteConfig();
             } else {
                 this.loadStandaloneConfig();
             }
+            gg.vape.module.none.ClientSettings.suppressStoredCategoryFrameVisibility = false;
+            EventTickBase.POST_TICK_EXECUTOR.execute(this::finalizeFreshInstallFrameState);
         }
         catch (Throwable ignored) {
         }
+    }
+
+    private void finalizeFreshInstallFrameState() {
+        gg.vape.module.none.ClientSettings.closeAllCategoryFrames();
+        Profile activeProfile = this.vape.getProfilesManager().getActiveProfile();
+        if (activeProfile != null) {
+            activeProfile.captureCurrentState();
+            activeProfile.setDirty(true);
+        }
+        this.vape.saveAndStop();
     }
 
     private void loadRemoteConfig() {

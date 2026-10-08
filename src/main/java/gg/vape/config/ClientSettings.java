@@ -1,6 +1,7 @@
 package gg.vape.config;
 
 import gg.vape.Vape;
+import gg.vape.event.impl.EventTickBase;
 import gg.vape.input.BindSet;
 import gg.vape.input.GlfwToVirtualKeyCodeMap;
 import gg.vape.input.KeyBindingInputState;
@@ -10,7 +11,10 @@ import gg.vape.input.MouseInput;
 import gg.vape.mapping.MappedClasses;
 import gg.vape.module.Mod;
 import gg.vape.module.blatant.AntiBot;
+import gg.vape.module.render.Freecam;
 import gg.vape.module.render.entity.RenderEntityContext;
+import gg.vape.notification.NotificationText;
+import gg.vape.notification.NotificationType;
 import gg.vape.unmap.ModeOption;
 import gg.vape.unmap.ModeSelection;
 import gg.vape.utils.ItemStackScoreUtil;
@@ -67,7 +71,9 @@ public class ClientSettings {
     public static final ModeOption NO_MOVEMENT_CORRECTION;
     public final ModeValue movementCorrection;
     public ColorValue guiColor = ColorValue.create(this, "Gui Color", new Color(5, 134, 105));
+    public final BooleanValue disableFreecamOnInject;
     public static final ModeOption PROPER_MOVEMENT_CORRECTION;
+    private static boolean injectFreecamCheckCompleted;
 
     public static boolean isReservedEntity(Entity entity) {
         return ClientSettings.isReservedEntityId(entity.S());
@@ -327,11 +333,42 @@ public class ClientSettings {
         this.aimIndicator = BooleanValue.create(this, "Aim indicator", false, "Shows a line where you are aiming silently");
         this.useReach = BooleanValue.create(this, "Use Reach", false, "Uses Reach module to increase reach for Silent Aim modules");
         this.useHitboxes = BooleanValue.create(this, "Use Hitboxes", false, "Uses Hitboxes module to increase hitboxes for Silent Aim modules");
+        this.disableFreecamOnInject = BooleanValue.create(this, "Disable Freecam on inject", true, "Turns Freecam off if it is still enabled when the client is injected");
         ModeOption modeOption = new ModeOption("Auto");
         this.guiScale = ModeValue.create((Object)this, "GUI Scale", "Scale of GUI", (ModeSelection)modeOption, modeOption, new ModeOption("Tiny"), new ModeOption("Small"), new ModeOption("Normal"), new ModeOption("Large"), new ModeOption("Huge"));
         this.guiColor.setColorTransformEnabled(true);
         this.healthPrediction.addDependentValues(this.estimateFoodHealing, this.estimateFallDamage);
         ((BindSet)this.addFriendBind.getValue()).addChangeListener(new ClientSettingsBindChangeListener(this));
+    }
+
+    /**
+     * 注入时的一次性检查（由 {@code Vape.loadConfigData} 在配置/配置档案应用完成后调用）：
+     * 若此时 Freecam 仍处于开启状态（例如上次会话残留在配置里），就自动关闭并弹出通知。
+     * 受客户端设置 "Disable Freecam on inject" 控制，且每次注入只生效一次。
+     */
+    public void checkFreecamStateOnInject() {
+        if (injectFreecamCheckCompleted) {
+            return;
+        }
+        injectFreecamCheckCompleted = true;
+        if (!this.disableFreecamOnInject.getEffectiveValue().booleanValue()) {
+            return;
+        }
+        Freecam freecam = Vape.INSTANCE.getModManager().getMod(Freecam.class);
+        if (freecam == null || !freecam.isEnabled()) {
+            return;
+        }
+        // 配置加载可能发生在同步线程，模块状态变更与通知统一放到客户端线程执行
+        EventTickBase.POST_TICK_EXECUTOR.execute(() -> {
+            if (!freecam.isEnabled()) {
+                return;
+            }
+            freecam.setEnabled(false, false);
+            // Freecam 的关闭默认是异步的（置 disableRequested，由控制器 tick 完成）；
+            // 注入早期可能还没有世界/tick，这里就地完成关闭。
+            freecam.completeDisable();
+            Vape.INSTANCE.getNotificationManager().show(NotificationText.localize("Freecam"), NotificationText.localize("Freecam was still enabled after injection and has been turned off"), NotificationType.WARNING, 5000L);
+        });
     }
 
     public static int reserveEntityId() {

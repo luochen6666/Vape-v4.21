@@ -18,6 +18,7 @@ import gg.vape.utils.MutableColor;
 import gg.vape.utils.render.OpenGlBackendHolder;
 import gg.vape.utils.render.RenderUtils;
 import gg.vape.utils.render.StencilUtil;
+import gg.vape.wrapper.impl.ActiveRenderInfo;
 import gg.vape.wrapper.impl.Entity;
 import gg.vape.wrapper.impl.EntityPlayerSP;
 import gg.vape.wrapper.impl.ForgeVersion;
@@ -25,6 +26,7 @@ import gg.vape.wrapper.impl.GlStateManager;
 import gg.vape.wrapper.impl.Minecraft;
 import gg.vape.wrapper.impl.RenderLivingBase;
 import gg.vape.wrapper.impl.RenderManager;
+import gg.vape.wrapper.impl.Vec3;
 import gg.vape.wrapper.impl.WorldClient;
 import java.util.ArrayList;
 import java.util.List;
@@ -160,6 +162,22 @@ extends SubModule<ESP> {
         boolean alphaTestEnabled = GL11.glIsEnabled((int)3008);
         GlStateManager.disableDepth();
         StencilUtil.getInstance().configureLayerMask(true);
+        double referenceX = RenderManager.getInterpolatedRenderPosX();
+        double referenceY = RenderManager.getInterpolatedRenderPosY();
+        double referenceZ = RenderManager.getInterpolatedRenderPosZ();
+        // 1.17+ 的原版实体渲染是按「相机相对」坐标调用 doRender 的（LevelRenderer 自己减掉
+        // camera 位置），而 ESPOutline 不走 RenderUtil.d()，没有那层模型矩阵修回，所以这里
+        // 必须直接用相机位置做参考点，否则第三人称下整圈描边会整体偏移一个后拉距离。
+        // 1.16.5 及更早仍是 renderPos 相对语义，保持原样。
+        if (ForgeVersion.MC_1_17.d()) {
+            ActiveRenderInfo activeRenderInfo = Minecraft.m$src$Lgg_vape_wrapper_impl_EntityRenderer_$13begmf().l();
+            if (activeRenderInfo.isNotNull()) {
+                Vec3 cameraPosition = activeRenderInfo.o();
+                referenceX = cameraPosition.getX();
+                referenceY = cameraPosition.getY();
+                referenceZ = cameraPosition.getZ();
+            }
+        }
         GL11.glNewList((int)displayList, (int)4864);
         for (Object entityHandle : world.z()) {
             Entity entity = new Entity(entityHandle);
@@ -169,9 +187,9 @@ extends SubModule<ESP> {
             double previousX = entity.M();
             double previousY = entity.W();
             double previousZ = entity.m$src$D$fwnne5();
-            double renderX = previousX + (entity.z() - previousX) * (double)event.getTicks() - RenderManager.getInterpolatedRenderPosX();
-            double renderY = previousY + (entity.N() - previousY) * (double)event.getTicks() - RenderManager.getInterpolatedRenderPosY();
-            double renderZ = previousZ + (entity.h() - previousZ) * (double)event.getTicks() - RenderManager.getInterpolatedRenderPosZ();
+            double renderX = previousX + (entity.z() - previousX) * (double)event.getTicks() - referenceX;
+            double renderY = previousY + (entity.N() - previousY) * (double)event.getTicks() - referenceY;
+            double renderZ = previousZ + (entity.h() - previousZ) * (double)event.getTicks() - referenceZ;
             boolean entityWasInvisible = entity.J$src$Z$fdev5g();
             entity.q(false);
             GL11.glPushMatrix();

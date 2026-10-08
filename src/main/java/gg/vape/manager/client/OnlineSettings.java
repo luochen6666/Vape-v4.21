@@ -80,6 +80,9 @@ public class OnlineSettings {
             }
         }
         catch (Exception exception) {
+            // 加载失败（离线/本地服务不可用）时 payload 可能仍为 null：
+            // 先兜底为一份默认 payload 再初始化默认字段，避免二次 NPE
+            this.payload = new OnlineSettingsPayload();
             this.payload.initializeDefaults();
             this.loadFailed = true;
         }
